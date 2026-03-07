@@ -10,6 +10,7 @@ export async function GET(request: Request) {
   const secretParam = url.searchParams.get('secret')
   const authHeader = request.headers.get('authorization')
   const cronHeader = request.headers.get('x-vercel-cron')
+
   const cronSecret = process.env.CRON_SECRET || ''
 
   const ok =
@@ -21,10 +22,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  try {
-    const db = createServiceClient()
-    const today = new Date().toISOString().split('T')[0]
+  const db = createServiceClient()
+  const today = new Date().toISOString().split('T')[0]
 
+  try {
     const { data: existing, error: checkError } = await db
       .from('articles')
       .select('id')
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
       .limit(1)
 
     if (checkError) {
-      throw new Error(`Supabase Check Error: ${checkError.message}`)
+      throw checkError
     }
 
     if (existing && existing.length > 0) {
@@ -42,12 +43,20 @@ export async function GET(request: Request) {
       })
     }
 
-    const result = await generateDailyArticles()
+    const articles = await generateDailyArticles(today)
+
+    const { error: insertError } = await db
+      .from('articles')
+      .insert(articles)
+
+    if (insertError) {
+      throw insertError
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Articles generated successfully',
-      result,
+      count: articles.length,
     })
   } catch (err: any) {
     console.error('CRON EXECUTION ERROR:', err)
