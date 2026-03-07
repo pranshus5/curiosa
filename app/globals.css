@@ -1,0 +1,100 @@
+/* app/globals.css */
+:root {
+  --ink:     #1C1917;
+  --ink-s:   #44403C;
+  --ink-m:   #78716C;
+  --ink-f:   #A8A29E;
+  --paper:   #FDFAF5;
+  --paper-w: #F5EFE6;
+  --rule:    #E7DDD0;
+  --gold:    #B8960C;
+  --gold-l:  #D4AF37;
+  --gold-p:  #F5EDD5;
+  --red:     #9B2335;
+  --green:   #3D6B4F;
+  --serif:   'Playfair Display', 'Georgia', serif;
+  --body:    'EB Garamond', 'Georgia', serif;
+  --sans:    'DM Sans', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); }
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: var(--paper-w); }
+::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 2px; }
+::selection { background: var(--gold-p); }
+
+/* ── Animations ── */
+@keyframes fadeIn  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse   { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes spin    { to { transform: rotate(360deg); } }
+
+.fi  { animation: fadeIn  0.3s ease both; }
+.su  { animation: slideUp 0.35s ease both; }
+.pu  { animation: pulse   1.4s ease infinite; }
+.sp  { animation: spin    1s linear infinite; display: inline-block; }
+
+/* ── Cards ── */
+.card {
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  padding: 20px 22px;
+  transition: background 0.12s;
+  position: relative;
+}
+.card:hover  { background: var(--paper-w); }
+.card:active { background: var(--gold-p); }
+
+/* ── Pills ── */
+.pill {
+  display: inline-flex; align-items: center;
+  padding: 3px 11px; border-radius: 20px;
+  font-family: var(--sans); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.03em; white-space: nowrap;
+  cursor: pointer; border: 1px solid;
+  transition: all 0.1s;
+}
+
+/* ── Nav tabs ── */
+.ntab {
+  flex: 1; background: none; border: none;
+  padding: 10px 0; cursor: pointer;
+  font-family: var(--sans); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+  transition: all 0.12s;
+}
+
+/* ── Buttons ── */
+.btn {
+  background: var(--ink); color: var(--paper);
+  border: none; cursor: pointer;
+  font-family: var(--sans); font-size: 13px;
+  padding: 9px 18px; border-radius: 6px;
+  transition: background 0.12s;
+}
+.btn:hover    { background: var(--ink-s); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Reader drop-cap ── */
+.rbody p {
+  font-family: var(--body);
+  line-height: 1.9;
+  color: var(--ink-s);
+  margin-bottom: 1.35em;
+}
+.rbody p:first-child::first-letter {
+  font-family: var(--serif);
+  font-size: 4em; font-weight: 700;
+  float: left; line-height: 0.82;
+  margin: 0.06em 0.08em 0 0;
+  color: var(--ink);
+}
+
+/* ── Mobile safe area ── */
+@supports (padding: max(0px)) {
+  .safe-bottom { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
