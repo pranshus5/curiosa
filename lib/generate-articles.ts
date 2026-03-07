@@ -51,14 +51,9 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     throw new Error('GEMINI_API_KEY is missing in environment variables')
   }
 
-  // Debug with one category first.
-  // After it works, switch this back to the ALL_CATEGORIES shuffle version below.
-  const selectedCategories: Category[] = ['Technology']
-
-  // Restore later:
-  // const selectedCategories = [...ALL_CATEGORIES]
-  //   .sort(() => Math.random() - 0.5)
-  //   .slice(0, 7)
+  const selectedCategories = [...ALL_CATEGORIES]
+    .sort(() => Math.random() - 0.5)
+    .slice(0, 7)
 
   const articles: GeneratedArticle[] = []
 
@@ -93,7 +88,7 @@ Rules:
 
     try {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
