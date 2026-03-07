@@ -48,7 +48,8 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     const source = REAL_SOURCES[cat][0]
 
     const prompt = `Generate a thought-provoking article about ${cat} in the style of ${source.name}.
-Respond ONLY with a raw JSON object (no markdown, no backticks):
+Respond ONLY with a valid raw JSON object. Do not use markdown fences. Do not add explanation text.
+Use this exact shape:
 {
   "title": "A compelling headline",
   "excerpt": "A 2-sentence summary",
@@ -58,6 +59,8 @@ Respond ONLY with a raw JSON object (no markdown, no backticks):
 }`
 
     try {
+      console.log(`Generating article for category: ${cat}`)
+
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,20 +75,28 @@ Respond ONLY with a raw JSON object (no markdown, no backticks):
 
       if (!res.ok) {
         const errorText = await res.text()
-        console.error(`Gemini request failed for ${cat}:`, errorText)
+        console.error(`Gemini request failed for ${cat}: ${res.status}`, errorText)
         continue
       }
 
       const data = await res.json()
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
 
-      if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        console.error(`Gemini returned empty for ${cat}`, data)
+      if (!text) {
+        console.error(`Gemini returned empty response for ${cat}:`, JSON.stringify(data))
         continue
       }
 
-      const text = data.candidates[0].content.parts[0].text
-      const cleanJson = text.replace(/^[^{]*|[^}]*$/g, '').trim()
-      const obj = JSON.parse(cleanJson)
+      let obj: any
+
+      try {
+        const cleanJson = text.replace(/```json|```/g, '').trim()
+        obj = JSON.parse(cleanJson)
+      } catch (parseErr) {
+        console.error(`JSON parse failed for ${cat}:`, parseErr)
+        console.error(`Raw Gemini text for ${cat}:`, text)
+        continue
+      }
 
       articles.push({
         title: obj.title || `Exploring ${cat}`,
@@ -100,11 +111,14 @@ Respond ONLY with a raw JSON object (no markdown, no backticks):
         read_time: 7,
         sym: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
       })
+
+      console.log(`Article generated successfully for ${cat}`)
     } catch (e) {
       console.error(`Curation failed for ${cat}:`, e)
       continue
     }
   }
 
+  console.log(`Generated ${articles.length} articles total`)
   return articles
 }
