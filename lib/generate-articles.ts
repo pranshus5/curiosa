@@ -51,11 +51,11 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     throw new Error('GEMINI_API_KEY is missing in environment variables')
   }
 
-  // Debug with one category first. After confirming it works,
-  // switch back to the shuffled ALL_CATEGORIES version below.
+  // Debug with one category first.
+  // After it works, switch this back to the ALL_CATEGORIES shuffle version below.
   const selectedCategories: Category[] = ['Technology']
 
-  // Restore this after debugging:
+  // Restore later:
   // const selectedCategories = [...ALL_CATEGORIES]
   //   .sort(() => Math.random() - 0.5)
   //   .slice(0, 7)
@@ -180,5 +180,7 @@ Rules:
   }
 
   console.log(`Generated ${articles.length} articles total`)
+  console.log('Final generated articles payload:', JSON.stringify(articles))
+
   return articles
 }
