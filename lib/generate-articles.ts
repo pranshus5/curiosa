@@ -29,11 +29,19 @@ type GeneratedArticle = {
 }
 
 type GeminiArticlePayload = {
-  title?: string
-  excerpt?: string
-  content?: string
+  title?: unknown
+  excerpt?: unknown
+  content?: unknown
   refs?: unknown
   tags?: unknown
+}
+
+function safeParseJson<T>(value: string): T | null {
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return null
+  }
 }
 
 export async function generateDailyArticles(dateStr: string): Promise<GeneratedArticle[]> {
@@ -43,13 +51,17 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     throw new Error('GEMINI_API_KEY is missing in environment variables')
   }
 
-  const shuffled = [...ALL_CATEGORIES]
-    .sort(() => Math.random() - 0.5)
-    .slice(0, 7)
+  // Debug with 1 category first. After it works, switch back to shuffled 7.
+  const selectedCategories: Category[] = ['Technology']
+
+  // Later, restore this:
+  // const selectedCategories = [...ALL_CATEGORIES]
+  //   .sort(() => Math.random() - 0.5)
+  //   .slice(0, 7)
 
   const articles: GeneratedArticle[] = []
 
-  for (const cat of shuffled) {
+  for (const cat of selectedCategories) {
     const source = REAL_SOURCES[cat]?.[0]
 
     if (!source) {
@@ -58,9 +70,9 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     }
 
     const prompt = `
-Generate a thought-provoking article about ${cat} in the style of ${source.name}.
+Generate a thoughtful, original article about ${cat} in the style of ${source.name}.
 
-Return ONLY valid JSON with this exact structure:
+Return ONLY valid JSON with exactly this structure:
 {
   "title": "A compelling headline",
   "excerpt": "A 2-sentence summary",
@@ -70,11 +82,11 @@ Return ONLY valid JSON with this exact structure:
 }
 
 Rules:
-- Do not wrap the JSON in markdown
-- Do not add commentary
-- Ensure refs is an array of strings
-- Ensure tags is an array of strings
-- Make the content polished and readable
+- No markdown
+- No backticks
+- No commentary outside the JSON
+- refs must be an array of strings
+- tags must be an array of strings
 `.trim()
 
     try {
@@ -82,69 +94,66 @@ Rules:
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
               temperature: 0.8,
-              maxOutputTokens: 1500,
+              maxOutputTokens: 1200,
               responseMimeType: 'application/json',
             },
           }),
         }
       )
 
-      const rawText = await res.text()
+      const rawResponse = await res.text()
+
       console.log(`Gemini status for ${cat}: ${res.status}`)
-      console.log(`Gemini raw response for ${cat}: ${rawText}`)
+      console.log(`Gemini raw response for ${cat}: ${rawResponse}`)
 
       if (!res.ok) {
-        console.error(`Gemini request failed for ${cat}: ${res.status} ${rawText}`)
+        console.error(`Gemini request failed for ${cat}: ${res.status}`)
         continue
       }
 
-      let data: any
-      try {
-        data = JSON.parse(rawText)
-      } catch (e) {
-        console.error(`Failed to parse Gemini API envelope for ${cat}:`, e)
+      const envelope = safeParseJson<any>(rawResponse)
+      if (!envelope) {
+        console.error(`Failed to parse Gemini API envelope for ${cat}`)
         continue
       }
 
-      const candidate = data?.candidates?.[0]
+      const candidate = envelope?.candidates?.[0]
       const finishReason = candidate?.finishReason
       const text = candidate?.content?.parts?.[0]?.text
 
-      if (finishReason && finishReason !== 'STOP') {
-        console.error(`Gemini did not finish normally for ${cat}: ${finishReason}`, data)
-      }
+      console.log(`Gemini finishReason for ${cat}: ${finishReason}`)
 
       if (!text || typeof text !== 'string') {
-        console.error(`Gemini returned no usable text for ${cat}:`, data)
+        console.error(`Gemini returned no usable text for ${cat}:`, envelope)
         continue
       }
 
-      let obj: GeminiArticlePayload
-      try {
-        obj = JSON.parse(text)
-      } catch (e) {
-        console.error(`Failed to parse article JSON for ${cat}:`, e)
-        console.error(`Article text was:`, text)
+      const parsed = safeParseJson<GeminiArticlePayload>(text)
+      if (!parsed) {
+        console.error(`Failed to parse article JSON for ${cat}`)
+        console.error(`Article text was: ${text}`)
         continue
       }
 
-      const refs =
-        Array.isArray(obj.refs) ? obj.refs.filter((x): x is string => typeof x === 'string') : []
-
-      const tags =
-        Array.isArray(obj.tags) ? obj.tags.filter((x): x is string => typeof x === 'string') : []
-
-      const title = typeof obj.title === 'string' ? obj.title.trim() : ''
-      const excerpt = typeof obj.excerpt === 'string' ? obj.excerpt.trim() : ''
-      const content = typeof obj.content === 'string' ? obj.content.trim() : ''
+      const title = typeof parsed.title === 'string' ? parsed.title.trim() : ''
+      const excerpt = typeof parsed.excerpt === 'string' ? parsed.excerpt.trim() : ''
+      const content = typeof parsed.content === 'string' ? parsed.content.trim() : ''
+      const refs = Array.isArray(parsed.refs)
+        ? parsed.refs.filter((x): x is string => typeof x === 'string')
+        : []
+      const tags = Array.isArray(parsed.tags)
+        ? parsed.tags.filter((x): x is string => typeof x === 'string')
+        : []
 
       if (!title || !excerpt || !content) {
-        console.error(`Gemini returned incomplete article for ${cat}:`, obj)
+        console.error(`Gemini returned incomplete article for ${cat}:`, parsed)
         continue
       }
 
@@ -163,8 +172,8 @@ Rules:
       })
 
       console.log(`Article generated successfully for ${cat}`)
-    } catch (e) {
-      console.error(`Curation failed for ${cat}:`, e)
+    } catch (error) {
+      console.error(`Curation failed for ${cat}:`, error)
     }
   }
 
