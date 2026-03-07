@@ -48,8 +48,8 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     const source = REAL_SOURCES[cat][0]
 
     const prompt = `Generate a thought-provoking article about ${cat} in the style of ${source.name}.
-Respond ONLY with a valid raw JSON object. Do not use markdown fences. Do not add explanation text.
-Use this exact shape:
+Respond ONLY with valid raw JSON. No markdown fences. No explanation text.
+Use exactly this shape:
 {
   "title": "A compelling headline",
   "excerpt": "A 2-sentence summary",
@@ -59,7 +59,7 @@ Use this exact shape:
 }`
 
     try {
-      console.log(`Generating article for category: ${cat}`)
+      console.log(`Generating article for ${cat}`)
 
       const res = await fetch(url, {
         method: 'POST',
@@ -75,7 +75,7 @@ Use this exact shape:
 
       if (!res.ok) {
         const errorText = await res.text()
-        console.error(`Gemini request failed for ${cat}: ${res.status}`, errorText)
+        console.error(`Gemini request failed for ${cat}: status=${res.status}`, errorText)
         continue
       }
 
@@ -113,9 +113,8 @@ Use this exact shape:
       })
 
       console.log(`Article generated successfully for ${cat}`)
-    } catch (e) {
-      console.error(`Curation failed for ${cat}:`, e)
-      continue
+    } catch (error) {
+      console.error(`Curation failed for ${cat}:`, error)
     }
   }
 
