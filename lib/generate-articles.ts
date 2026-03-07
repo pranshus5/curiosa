@@ -45,7 +45,7 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     const source = REAL_SOURCES[cat][0]
 
     const prompt = `Generate a thought-provoking article about ${cat} in the style of ${source.name}.
-Respond ONLY with valid JSON. No markdown fences. No explanation.
+Respond ONLY with valid JSON. No markdown fences. No explanation text.
 Use exactly this shape:
 {
   "title": "A compelling headline",
