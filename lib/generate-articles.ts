@@ -35,9 +35,6 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     throw new Error('GEMINI_API_KEY is missing in environment variables')
   }
 
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`
-
   const shuffled = [...ALL_CATEGORIES]
     .sort(() => Math.random() - 0.5)
     .slice(0, 7)
@@ -48,7 +45,7 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     const source = REAL_SOURCES[cat][0]
 
     const prompt = `Generate a thought-provoking article about ${cat} in the style of ${source.name}.
-Respond ONLY with valid raw JSON. No markdown fences. No explanation text.
+Respond ONLY with valid JSON. No markdown fences. No explanation.
 Use exactly this shape:
 {
   "title": "A compelling headline",
@@ -59,42 +56,53 @@ Use exactly this shape:
 }`
 
     try {
-      console.log(`Generating article for ${cat}`)
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.8,
+              maxOutputTokens: 1500,
+            },
+          }),
+        }
+      )
 
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.8,
-            maxOutputTokens: 1500,
-          },
-        }),
-      })
+      console.log(`Gemini status for ${cat}:`, res.status)
+
+      const rawText = await res.text()
+      console.log(`Gemini raw response for ${cat}:`, rawText)
 
       if (!res.ok) {
-        const errorText = await res.text()
-        console.error(`Gemini request failed for ${cat}: status=${res.status}`, errorText)
+        console.error(`Gemini request failed for ${cat}`)
         continue
       }
 
-      const data = await res.json()
+      let data: any
+      try {
+        data = JSON.parse(rawText)
+      } catch (e) {
+        console.error(`Failed to parse Gemini API response for ${cat}:`, e)
+        continue
+      }
+
       const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
 
       if (!text) {
-        console.error(`Gemini returned empty response for ${cat}:`, JSON.stringify(data))
+        console.error(`Gemini returned no usable text for ${cat}:`, data)
         continue
       }
 
       let obj: any
-
       try {
         const cleanJson = text.replace(/```json|```/g, '').trim()
         obj = JSON.parse(cleanJson)
-      } catch (parseErr) {
-        console.error(`JSON parse failed for ${cat}:`, parseErr)
-        console.error(`Raw Gemini text for ${cat}:`, text)
+      } catch (e) {
+        console.error(`Failed to parse article JSON for ${cat}:`, e)
+        console.error(`Article text was:`, text)
         continue
       }
 
@@ -111,10 +119,8 @@ Use exactly this shape:
         read_time: 7,
         sym: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
       })
-
-      console.log(`Article generated successfully for ${cat}`)
-    } catch (error) {
-      console.error(`Curation failed for ${cat}:`, error)
+    } catch (e) {
+      console.error(`Curation failed for ${cat}:`, e)
     }
   }
 
