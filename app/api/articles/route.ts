@@ -37,8 +37,7 @@ export async function GET(request: Request) {
   const { data, error } = await query.limit(50)
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+    return NextResponse.json({ error: 'Failed', detail: String(err), stack: err instanceof Error ? err.message : 'unknown' }, { status: 500 })
 
   return NextResponse.json({ articles: data || [] })
 }
