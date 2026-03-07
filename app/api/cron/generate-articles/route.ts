@@ -46,7 +46,15 @@ export async function GET(request: Request) {
     const articles = await generateDailyArticles(today)
 
     if (!articles || articles.length === 0) {
-      throw new Error('No articles were generated')
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Generation Failed',
+          message: 'No articles were generated',
+          hint: 'Check Vercel runtime logs for Gemini status/raw response lines',
+        },
+        { status: 500 }
+      )
     }
 
     const { error: insertError } = await db
