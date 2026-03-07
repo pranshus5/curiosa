@@ -28,6 +28,14 @@ type GeneratedArticle = {
   sym: string
 }
 
+type GeminiArticlePayload = {
+  title?: string
+  excerpt?: string
+  content?: string
+  refs?: unknown
+  tags?: unknown
+}
+
 export async function generateDailyArticles(dateStr: string): Promise<GeneratedArticle[]> {
   const apiKey = process.env.GEMINI_API_KEY
 
@@ -42,18 +50,32 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
   const articles: GeneratedArticle[] = []
 
   for (const cat of shuffled) {
-    const source = REAL_SOURCES[cat][0]
+    const source = REAL_SOURCES[cat]?.[0]
 
-    const prompt = `Generate a thought-provoking article about ${cat} in the style of ${source.name}.
-Respond ONLY with valid JSON. No markdown fences. No explanation text.
-Use exactly this shape:
+    if (!source) {
+      console.error(`No source configured for category: ${cat}`)
+      continue
+    }
+
+    const prompt = `
+Generate a thought-provoking article about ${cat} in the style of ${source.name}.
+
+Return ONLY valid JSON with this exact structure:
 {
   "title": "A compelling headline",
   "excerpt": "A 2-sentence summary",
   "content": "A detailed 5-paragraph exploration with line breaks",
   "refs": ["Source 1", "Source 2"],
   "tags": ["tag1", "tag2"]
-}`
+}
+
+Rules:
+- Do not wrap the JSON in markdown
+- Do not add commentary
+- Ensure refs is an array of strings
+- Ensure tags is an array of strings
+- Make the content polished and readable
+`.trim()
 
     try {
       const res = await fetch(
@@ -66,18 +88,18 @@ Use exactly this shape:
             generationConfig: {
               temperature: 0.8,
               maxOutputTokens: 1500,
+              responseMimeType: 'application/json',
             },
           }),
         }
       )
 
-      console.log(`Gemini status for ${cat}:`, res.status)
-
       const rawText = await res.text()
-      console.log(`Gemini raw response for ${cat}:`, rawText)
+      console.log(`Gemini status for ${cat}: ${res.status}`)
+      console.log(`Gemini raw response for ${cat}: ${rawText}`)
 
       if (!res.ok) {
-        console.error(`Gemini request failed for ${cat}`)
+        console.error(`Gemini request failed for ${cat}: ${res.status} ${rawText}`)
         continue
       }
 
@@ -85,33 +107,53 @@ Use exactly this shape:
       try {
         data = JSON.parse(rawText)
       } catch (e) {
-        console.error(`Failed to parse Gemini API response for ${cat}:`, e)
+        console.error(`Failed to parse Gemini API envelope for ${cat}:`, e)
         continue
       }
 
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+      const candidate = data?.candidates?.[0]
+      const finishReason = candidate?.finishReason
+      const text = candidate?.content?.parts?.[0]?.text
 
-      if (!text) {
+      if (finishReason && finishReason !== 'STOP') {
+        console.error(`Gemini did not finish normally for ${cat}: ${finishReason}`, data)
+      }
+
+      if (!text || typeof text !== 'string') {
         console.error(`Gemini returned no usable text for ${cat}:`, data)
         continue
       }
 
-      let obj: any
+      let obj: GeminiArticlePayload
       try {
-        const cleanJson = text.replace(/```json|```/g, '').trim()
-        obj = JSON.parse(cleanJson)
+        obj = JSON.parse(text)
       } catch (e) {
         console.error(`Failed to parse article JSON for ${cat}:`, e)
         console.error(`Article text was:`, text)
         continue
       }
 
+      const refs =
+        Array.isArray(obj.refs) ? obj.refs.filter((x): x is string => typeof x === 'string') : []
+
+      const tags =
+        Array.isArray(obj.tags) ? obj.tags.filter((x): x is string => typeof x === 'string') : []
+
+      const title = typeof obj.title === 'string' ? obj.title.trim() : ''
+      const excerpt = typeof obj.excerpt === 'string' ? obj.excerpt.trim() : ''
+      const content = typeof obj.content === 'string' ? obj.content.trim() : ''
+
+      if (!title || !excerpt || !content) {
+        console.error(`Gemini returned incomplete article for ${cat}:`, obj)
+        continue
+      }
+
       articles.push({
-        title: obj.title || `Exploring ${cat}`,
-        excerpt: obj.excerpt || '',
-        content: obj.content || '',
-        refs: Array.isArray(obj.refs) ? obj.refs : [],
-        tags: Array.isArray(obj.tags) ? obj.tags : [],
+        title,
+        excerpt,
+        content,
+        refs,
+        tags,
         category: cat,
         source: source.name,
         source_url: source.url,
@@ -119,6 +161,8 @@ Use exactly this shape:
         read_time: 7,
         sym: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
       })
+
+      console.log(`Article generated successfully for ${cat}`)
     } catch (e) {
       console.error(`Curation failed for ${cat}:`, e)
     }
