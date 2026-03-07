@@ -51,10 +51,11 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
     throw new Error('GEMINI_API_KEY is missing in environment variables')
   }
 
-  // Debug with 1 category first. After it works, switch back to shuffled 7.
+  // Debug with one category first. After confirming it works,
+  // switch back to the shuffled ALL_CATEGORIES version below.
   const selectedCategories: Category[] = ['Technology']
 
-  // Later, restore this:
+  // Restore this after debugging:
   // const selectedCategories = [...ALL_CATEGORIES]
   //   .sort(() => Math.random() - 0.5)
   //   .slice(0, 7)
@@ -87,6 +88,7 @@ Rules:
 - No commentary outside the JSON
 - refs must be an array of strings
 - tags must be an array of strings
+- content should be polished and readable
 `.trim()
 
     try {
@@ -108,17 +110,17 @@ Rules:
         }
       )
 
-      const rawResponse = await res.text()
+      const rawText = await res.text()
 
       console.log(`Gemini status for ${cat}: ${res.status}`)
-      console.log(`Gemini raw response for ${cat}: ${rawResponse}`)
+      console.log(`Gemini raw response for ${cat}: ${rawText}`)
 
       if (!res.ok) {
         console.error(`Gemini request failed for ${cat}: ${res.status}`)
         continue
       }
 
-      const envelope = safeParseJson<any>(rawResponse)
+      const envelope = safeParseJson<any>(rawText)
       if (!envelope) {
         console.error(`Failed to parse Gemini API envelope for ${cat}`)
         continue
