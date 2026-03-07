@@ -10,7 +10,6 @@ export async function GET(request: Request) {
   const secretParam = url.searchParams.get('secret')
   const authHeader = request.headers.get('authorization')
   const cronHeader = request.headers.get('x-vercel-cron')
-
   const cronSecret = process.env.CRON_SECRET || ''
 
   const ok =
@@ -22,10 +21,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const db = createServiceClient()
-  const today = new Date().toISOString().split('T')[0]
-
   try {
+    const db = createServiceClient()
+    const today = new Date().toISOString().split('T')[0]
+
     const { data: existing, error: checkError } = await db
       .from('articles')
       .select('id')
@@ -33,7 +32,7 @@ export async function GET(request: Request) {
       .limit(1)
 
     if (checkError) {
-      throw checkError
+      throw new Error(`Supabase Check Error: ${checkError.message}`)
     }
 
     if (existing && existing.length > 0) {
