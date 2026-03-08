@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server'
 import { generateDailyArticles } from '@/lib/generate-articles'
 import { createServiceClient } from '@/lib/supabase'
+import type { Category } from '@/types'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
+
+const TARGET_DAILY_COUNT = 3
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
@@ -27,23 +30,34 @@ export async function GET(request: Request) {
 
     const { data: existing, error: checkError } = await db
       .from('articles')
-      .select('id')
+      .select('id, category')
       .eq('date', today)
-      .limit(1)
 
     if (checkError) {
       throw new Error(`Supabase check failed: ${checkError.message}`)
     }
 
-    if (existing && existing.length > 0) {
+    const existingRows = existing ?? []
+    const existingCount = existingRows.length
+
+    if (existingCount >= TARGET_DAILY_COUNT) {
       return NextResponse.json({
         success: true,
         message: 'Articles already exist for today',
-        count: existing.length,
+        count: existingCount,
       })
     }
 
-    const articles = await generateDailyArticles(today)
+    const existingCategories = existingRows
+      .map((row) => row.category)
+      .filter((x): x is Category => typeof x === 'string') as Category[]
+
+    const missingCount = TARGET_DAILY_COUNT - existingCount
+
+    const articles = await generateDailyArticles(today, {
+      count: missingCount,
+      excludeCategories: existingCategories,
+    })
 
     if (!articles || articles.length === 0) {
       return NextResponse.json(
@@ -53,7 +67,7 @@ export async function GET(request: Request) {
           message: 'No articles were generated',
           hint: 'Check Vercel runtime logs for Gemini status/raw response lines',
         },
-        { status: 500 }
+        { status: 500 },
       )
     }
 
@@ -68,7 +82,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       message: 'Articles generated successfully',
-      count: articles.length,
+      count: existingCount + articles.length,
+      inserted_now: articles.length,
     })
   } catch (err: any) {
     console.error('CRON EXECUTION ERROR:', err)
@@ -79,7 +94,7 @@ export async function GET(request: Request) {
         error: 'Generation Failed',
         message: err?.message || 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
