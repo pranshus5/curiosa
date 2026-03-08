@@ -26,7 +26,7 @@ type GeneratedArticle = {
   title: string
   excerpt: string
   content: string
-  refs: string[]
+  references: string[]
   tags: string[]
   category: Category
   source: string
@@ -40,6 +40,7 @@ type GeminiArticlePayload = {
   title?: unknown
   excerpt?: unknown
   content?: unknown
+  references?: unknown
   refs?: unknown
   tags?: unknown
 }
@@ -101,7 +102,7 @@ Return ONLY valid JSON with exactly this structure:
   "title": "A compelling headline",
   "excerpt": "A 2-sentence summary",
   "content": "A detailed 5-paragraph exploration with line breaks",
-  "refs": ["Source 1", "Source 2"],
+  "references": ["Source 1", "Source 2"],
   "tags": ["tag1", "tag2"]
 }
 
@@ -109,7 +110,7 @@ Rules:
 - No markdown
 - No backticks
 - No commentary outside the JSON
-- refs must be an array of strings
+- references must be an array of strings
 - tags must be an array of strings
 - content should be polished, readable, and insightful
 - make the article feel current and grounded in India
@@ -122,7 +123,7 @@ Return ONLY valid JSON with exactly this structure:
   "title": "A compelling headline",
   "excerpt": "A 2-sentence summary",
   "content": "A detailed 5-paragraph exploration with line breaks",
-  "refs": ["Source 1", "Source 2"],
+  "references": ["Source 1", "Source 2"],
   "tags": ["tag1", "tag2"]
 }
 
@@ -130,7 +131,7 @@ Rules:
 - No markdown
 - No backticks
 - No commentary outside the JSON
-- refs must be an array of strings
+- references must be an array of strings
 - tags must be an array of strings
 - content should be polished and readable
 `.trim()
@@ -209,9 +210,14 @@ async function generateOneArticle(
       const title = typeof parsed.title === 'string' ? parsed.title.trim() : ''
       const excerpt = typeof parsed.excerpt === 'string' ? parsed.excerpt.trim() : ''
       const content = typeof parsed.content === 'string' ? parsed.content.trim() : ''
-      const refs = Array.isArray(parsed.refs)
-        ? parsed.refs.filter((x): x is string => typeof x === 'string')
-        : []
+
+      const rawReferences = Array.isArray(parsed.references)
+        ? parsed.references
+        : Array.isArray(parsed.refs)
+          ? parsed.refs
+          : []
+
+      const references = rawReferences.filter((x): x is string => typeof x === 'string')
       const tags = Array.isArray(parsed.tags)
         ? parsed.tags.filter((x): x is string => typeof x === 'string')
         : []
@@ -225,7 +231,7 @@ async function generateOneArticle(
         title,
         excerpt,
         content,
-        refs,
+        references,
         tags,
         category: cat,
         source: source.name,
