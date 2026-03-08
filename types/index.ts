@@ -11,7 +11,7 @@ export interface Article {
   sym: string
   excerpt: string
   content: string
-  refs: string[]
+  references: string[]
   tags: string[]
   created_at: string
 }
