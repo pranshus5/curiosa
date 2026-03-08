@@ -12,6 +12,7 @@ const REAL_SOURCES: Record<Category, { name: string; url: string }[]> = {
   Arts: [{ name: 'The Paris Review', url: 'https://www.theparisreview.org' }],
   Anthropology: [{ name: 'Sapiens', url: 'https://www.sapiens.org' }],
   Research: [{ name: 'The Conversation', url: 'https://theconversation.com' }],
+  Psychology: [{ name: 'Psychology Today', url: 'https://www.psychologytoday.com' }],
 
   'Indian Economy': [{ name: 'Mint', url: 'https://www.livemint.com' }],
   'Indian Politics': [{ name: 'The Hindu', url: 'https://www.thehindu.com' }],
@@ -65,8 +66,8 @@ export async function generateDailyArticles(dateStr: string): Promise<GeneratedA
   const globalCategories = ALL_CATEGORIES.filter((c) => !c.startsWith('Indian')) as Category[]
 
   const selectedCategories: Category[] = [
-    ...pickRandom(indiaCategories, Math.min(2, indiaCategories.length)),
-    ...pickRandom(globalCategories, Math.min(5, globalCategories.length)),
+    ...pickRandom(indiaCategories, Math.min(1, indiaCategories.length)),
+    ...pickRandom(globalCategories, Math.min(2, globalCategories.length)),
   ]
 
   const articles: GeneratedArticle[] = []
@@ -127,6 +128,8 @@ Rules:
 `.trim()
 
     try {
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
