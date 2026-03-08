@@ -44,6 +44,7 @@ export type Category =
   | 'Arts'
   | 'Anthropology'
   | 'Research'
+  | 'Psychology'
   | 'Indian Economy'
   | 'Indian Politics'
   | 'Indian Culture'
@@ -60,6 +61,7 @@ export const ALL_CATEGORIES: Category[] = [
   'Arts',
   'Anthropology',
   'Research',
+  'Psychology',
   'Indian Economy',
   'Indian Politics',
   'Indian Culture',
@@ -77,6 +79,7 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   Arts: '#7C3AED',
   Anthropology: '#B45309',
   Research: '#374151',
+  Psychology: '#BE185D',
   'Indian Economy': '#166534',
   'Indian Politics': '#991B1B',
   'Indian Culture': '#C2410C',
