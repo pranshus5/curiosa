@@ -63,7 +63,7 @@ function sleep(ms: number) {
 }
 
 function pickCategories(count: number, excludeCategories: Category[] = []): Category[] {
-  const preferred: Category[] = ['Technology', 'Psychology', 'Culture']
+  const preferred: Category[] = ['Technology']
   return preferred.filter((c) => !excludeCategories.includes(c)).slice(0, count)
 }
 
@@ -80,7 +80,7 @@ Return ONLY valid JSON with exactly this structure:
 {
   "title": "A compelling headline",
   "excerpt": "A 2-sentence summary",
-  "content": "A detailed 5-paragraph exploration with line breaks",
+  "content": "A detailed 4-paragraph exploration with line breaks",
   "references": ["Source 1", "Source 2"],
   "tags": ["tag1", "tag2"]
 }
@@ -101,7 +101,7 @@ Return ONLY valid JSON with exactly this structure:
 {
   "title": "A compelling headline",
   "excerpt": "A 2-sentence summary",
-  "content": "A detailed 5-paragraph exploration with line breaks",
+  "content": "A detailed 4-paragraph exploration with line breaks",
   "references": ["Source 1", "Source 2"],
   "tags": ["tag1", "tag2"]
 }
@@ -132,7 +132,7 @@ async function generateOneArticle(
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await sleep(5000 * attempt)
+      await sleep(10000 * attempt)
 
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
@@ -144,8 +144,8 @@ async function generateOneArticle(
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
-              temperature: 0.8,
-              maxOutputTokens: 1200,
+              temperature: 0.7,
+              maxOutputTokens: 700,
               responseMimeType: 'application/json',
             },
           }),
