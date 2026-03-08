@@ -1,32 +1,37 @@
-import { ALL_CATEGORIES, Category } from '@/types'
+import { Category } from '@/types'
 
-const SYMBOLS = ['◈', '✦', '△', '○', '⊕', '♩', '◎', '❋', '◇']
-const GEMINI_MODEL = 'gemini-2.5-flash'
-const TARGET_DAILY_COUNT = 1
+const SYMBOLS = ['◈', '✦', '△', '○', '⊕', '♩', '◎', '❋', '◇', '☆', '◉', '⟡']
 
-const REAL_SOURCES: Record<Category, { name: string; url: string }[]> = {
-  Philosophy: [{ name: 'Aeon', url: 'https://aeon.co' }],
-  Science: [{ name: 'Quanta Magazine', url: 'https://www.quantamagazine.org' }],
-  History: [{ name: 'Smithsonian Magazine', url: 'https://www.smithsonianmag.com' }],
-  Economics: [{ name: 'The Economist', url: 'https://www.economist.com' }],
-  Culture: [{ name: 'The Atlantic', url: 'https://www.theatlantic.com' }],
-  Technology: [{ name: 'WIRED', url: 'https://www.wired.com' }],
-  Arts: [{ name: 'The Paris Review', url: 'https://www.theparisreview.org' }],
-  Anthropology: [{ name: 'Sapiens', url: 'https://www.sapiens.org' }],
-  Research: [{ name: 'The Conversation', url: 'https://theconversation.com' }],
-  Psychology: [{ name: 'Psychology Today', url: 'https://www.psychologytoday.com' }],
-  'Indian Economy': [{ name: 'Mint', url: 'https://www.livemint.com' }],
-  'Indian Politics': [{ name: 'The Hindu', url: 'https://www.thehindu.com' }],
-  'Indian Culture': [{ name: 'Scroll.in', url: 'https://scroll.in' }],
-  'Indian Business': [{ name: 'Business Standard', url: 'https://www.business-standard.com' }],
-  'Indian Innovation': [{ name: 'YourStory', url: 'https://yourstory.com' }],
+const REAL_SOURCES: Record<Category, { name: string; url: string }> = {
+  Philosophy:          { name: 'Aeon', url: 'https://aeon.co' },
+  Science:             { name: 'Quanta Magazine', url: 'https://www.quantamagazine.org' },
+  History:             { name: 'Smithsonian Magazine', url: 'https://www.smithsonianmag.com' },
+  Economics:           { name: 'The Economist', url: 'https://www.economist.com' },
+  Culture:             { name: 'The Atlantic', url: 'https://www.theatlantic.com' },
+  Technology:          { name: 'WIRED', url: 'https://www.wired.com' },
+  Arts:                { name: 'The Paris Review', url: 'https://www.theparisreview.org' },
+  Anthropology:        { name: 'Sapiens', url: 'https://www.sapiens.org' },
+  Research:            { name: 'The Conversation', url: 'https://theconversation.com' },
+  Psychology:          { name: 'Psychology Today', url: 'https://www.psychologytoday.com' },
+  'Indian Economy':    { name: 'Mint', url: 'https://www.livemint.com' },
+  'Indian Politics':   { name: 'The Hindu', url: 'https://www.thehindu.com' },
+  'Indian Culture':    { name: 'Scroll.in', url: 'https://scroll.in' },
+  'Indian Business':   { name: 'Business Standard', url: 'https://www.business-standard.com' },
+  'Indian Innovation': { name: 'YourStory', url: 'https://yourstory.com' },
 }
+
+const ALL_CATS: Category[] = [
+  'Philosophy', 'Science', 'History', 'Economics',
+  'Culture', 'Technology', 'Arts', 'Anthropology', 'Research',
+  'Psychology', 'Indian Economy', 'Indian Politics',
+  'Indian Culture', 'Indian Business', 'Indian Innovation',
+]
 
 type GeneratedArticle = {
   title: string
   excerpt: string
   content: string
-  references: string[]
+  refs: string[]
   tags: string[]
   category: Category
   source: string
@@ -36,222 +41,129 @@ type GeneratedArticle = {
   sym: string
 }
 
-type GeminiArticlePayload = {
-  title?: unknown
-  excerpt?: unknown
-  content?: unknown
-  references?: unknown
-  refs?: unknown
-  tags?: unknown
-}
-
-type GenerateOptions = {
-  count?: number
-  excludeCategories?: Category[]
-}
-
-function safeParseJson<T>(value: string): T | null {
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return null
-  }
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function pickCategories(count: number, excludeCategories: Category[] = []): Category[] {
-  const preferred: Category[] = ['Technology']
-  return preferred.filter((c) => !excludeCategories.includes(c)).slice(0, count)
-}
-
-function buildPrompt(cat: Category, sourceName: string) {
-  const isIndiaCategory = cat.startsWith('Indian')
-
-  return isIndiaCategory
-    ? `
-Generate a thoughtful, original article about ${cat} in the Indian context, in the style of ${sourceName}.
-
-Focus on India-specific developments, institutions, markets, policies, culture, startups, business trends, or public life as appropriate for the category.
-
-Return ONLY valid JSON with exactly this structure:
-{
-  "title": "A compelling headline",
-  "excerpt": "A 2-sentence summary",
-  "content": "A detailed 4-paragraph exploration with line breaks",
-  "references": ["Source 1", "Source 2"],
-  "tags": ["tag1", "tag2"]
-}
-
-Rules:
-- No markdown
-- No backticks
-- No commentary outside the JSON
-- references must be an array of strings
-- tags must be an array of strings
-- content should be polished, readable, and insightful
-- make the article feel current and grounded in India
-`.trim()
-    : `
-Generate a thoughtful, original article about ${cat} in the style of ${sourceName}.
-
-Return ONLY valid JSON with exactly this structure:
-{
-  "title": "A compelling headline",
-  "excerpt": "A 2-sentence summary",
-  "content": "A detailed 4-paragraph exploration with line breaks",
-  "references": ["Source 1", "Source 2"],
-  "tags": ["tag1", "tag2"]
-}
-
-Rules:
-- No markdown
-- No backticks
-- No commentary outside the JSON
-- references must be an array of strings
-- tags must be an array of strings
-- content should be polished and readable
-`.trim()
-}
-
 async function generateOneArticle(
   apiKey: string,
   cat: Category,
-  dateStr: string,
+  dateStr: string
 ): Promise<GeneratedArticle | null> {
-  const source = REAL_SOURCES[cat]?.[0]
+  const source = REAL_SOURCES[cat]
+  if (!source) return null
 
-  if (!source) {
-    console.error(`No source configured for category: ${cat}`)
+  const isIndia = cat.startsWith('Indian')
+
+  const prompt = isIndia
+    ? `Generate a thought-provoking article about ${cat} for an Indian audience, in the style of ${source.name}. Make it grounded in real Indian context — policies, institutions, startups, people, or cultural moments.
+
+Return ONLY valid JSON (no markdown, no backticks):
+{
+  "title": "A compelling India-focused headline",
+  "excerpt": "2 sharp sentences that make a curious reader want more",
+  "content": "5 paragraphs separated by double newlines. Real Indian thinkers, companies, events, data points.",
+  "refs": ["Author A. (Year). Title. Publisher.", "Source B name"],
+  "tags": ["tag1", "tag2", "tag3"]
+}`
+    : `Generate a thought-provoking article about ${cat} in the style of ${source.name}.
+
+Return ONLY valid JSON (no markdown, no backticks):
+{
+  "title": "A compelling headline",
+  "excerpt": "2 sharp sentences that make a curious reader want more",
+  "content": "5 paragraphs separated by double newlines. Real thinkers, studies, concepts.",
+  "refs": ["Author A. (Year). Title. Publisher.", "Author B. (Year). Title. Journal."],
+  "tags": ["tag1", "tag2", "tag3"]
+}`
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.9, maxOutputTokens: 1200 },
+        }),
+      }
+    )
+
+    const data = await res.json()
+    console.log(`Gemini status for ${cat}: ${res.status}`)
+
+    if (!res.ok) {
+      console.error(`Gemini failed for ${cat}:`, JSON.stringify(data))
+      return null
+    }
+
+    const raw   = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()
+    const obj   = JSON.parse(clean)
+
+    return {
+      title:      obj.title,
+      excerpt:    obj.excerpt,
+      content:    obj.content,
+      refs:       Array.isArray(obj.refs) ? obj.refs : [],
+      tags:       Array.isArray(obj.tags) ? obj.tags : [],
+      category:   cat,
+      source:     source.name,
+      source_url: source.url,
+      date:       dateStr,
+      read_time:  8,
+      sym:        SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+    }
+  } catch (err) {
+    console.error(`Failed for ${cat}:`, err)
     return null
   }
-
-  const prompt = buildPrompt(cat, source.name)
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      await sleep(10000 * attempt)
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 700,
-              responseMimeType: 'application/json',
-            },
-          }),
-        },
-      )
-
-      const rawText = await res.text()
-
-      console.log(`Gemini status for ${cat}, attempt ${attempt}: ${res.status}`)
-      console.log(`Gemini raw response for ${cat}, attempt ${attempt}: ${rawText}`)
-
-      if (!res.ok) {
-        console.error(`Gemini request failed for ${cat}, attempt ${attempt}: ${res.status}`)
-        continue
-      }
-
-      const envelope = safeParseJson<any>(rawText)
-      if (!envelope) {
-        console.error(`Failed to parse Gemini API envelope for ${cat}`)
-        continue
-      }
-
-      const candidate = envelope?.candidates?.[0]
-      const text = candidate?.content?.parts?.[0]?.text
-
-      if (!text || typeof text !== 'string') {
-        console.error(`Gemini returned no usable text for ${cat}:`, envelope)
-        continue
-      }
-
-      const parsed = safeParseJson<GeminiArticlePayload>(text)
-      if (!parsed) {
-        console.error(`Failed to parse article JSON for ${cat}`)
-        console.error(`Article text was: ${text}`)
-        continue
-      }
-
-      const title = typeof parsed.title === 'string' ? parsed.title.trim() : ''
-      const excerpt = typeof parsed.excerpt === 'string' ? parsed.excerpt.trim() : ''
-      const content = typeof parsed.content === 'string' ? parsed.content.trim() : ''
-
-      const rawReferences = Array.isArray(parsed.references)
-        ? parsed.references
-        : Array.isArray(parsed.refs)
-          ? parsed.refs
-          : []
-
-      const references = rawReferences.filter((x): x is string => typeof x === 'string')
-      const tags = Array.isArray(parsed.tags)
-        ? parsed.tags.filter((x): x is string => typeof x === 'string')
-        : []
-
-      if (!title || !excerpt || !content) {
-        console.error(`Gemini returned incomplete article for ${cat}:`, parsed)
-        continue
-      }
-
-      return {
-        title,
-        excerpt,
-        content,
-        references,
-        tags,
-        category: cat,
-        source: source.name,
-        source_url: source.url,
-        date: dateStr,
-        read_time: 7,
-        sym: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-      }
-    } catch (error) {
-      console.error(`Curation failed for ${cat}, attempt ${attempt}:`, error)
-    }
-  }
-
-  return null
 }
 
-export async function generateDailyArticles(
-  dateStr: string,
-  options: GenerateOptions = {},
-): Promise<GeneratedArticle[]> {
+export async function generateDailyArticles(dateStr: string): Promise<GeneratedArticle[]> {
   const apiKey = process.env.GEMINI_API_KEY
+  if (!apiKey) throw new Error('GEMINI_API_KEY is missing')
 
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is missing in environment variables')
-  }
+  // Pick 5 global + 3 Indian categories every day for a balanced mix
+  const globalCats = ALL_CATS.filter(c => !c.startsWith('Indian'))
+  const indianCats = ALL_CATS.filter(c => c.startsWith('Indian'))
 
-  const count = options.count ?? TARGET_DAILY_COUNT
-  const excludeCategories = options.excludeCategories ?? []
-  const selectedCategories = pickCategories(count, excludeCategories)
+  const shuffledGlobal = [...globalCats].sort(() => Math.random() - 0.5).slice(0, 5)
+  const shuffledIndian = [...indianCats].sort(() => Math.random() - 0.5).slice(0, 3)
+  const picks = [...shuffledGlobal, ...shuffledIndian]
 
-  console.log('Selected categories:', JSON.stringify(selectedCategories))
+  console.log('Generating articles for:', picks.join(', '))
 
   const articles: GeneratedArticle[] = []
 
-  for (const cat of selectedCategories) {
-    const article = await generateOneArticle(apiKey, cat, dateStr)
-    if (article) {
-      articles.push(article)
-      console.log(`Article generated successfully for ${cat}`)
+  for (const cat of picks) {
+    const art = await generateOneArticle(apiKey, cat, dateStr)
+    if (art) {
+      articles.push(art)
+      console.log(`✓ Generated: ${art.title}`)
     }
   }
 
-  console.log(`Generated ${articles.length} articles total`)
-  console.log('Final generated articles payload:', JSON.stringify(articles))
-
+  console.log(`Total generated: ${articles.length}`)
   return articles
 }
+```
+
+Scroll down → **Commit changes**.
+
+---
+
+**Finally, update the UI category pills** — edit `components/CuriosaClient.tsx` on GitHub, find this line near the top:
+```
+const ALL_CATEGORIES: Category[] = [
+```
+
+And just below it you'll see the array. We need to update the import instead. Find this line at the very top of the file:
+```
+ALL_CATEGORIES, CATEGORY_COLORS,
+```
+
+That's already imported from types so it will pick up the new categories automatically once types is updated. ✅
+
+---
+
+Wait 2 minutes for Vercel to rebuild, then trigger:
+```
+https://curiosa-tan.vercel.app/api/cron/generate-articles?secret=curiosa2026
