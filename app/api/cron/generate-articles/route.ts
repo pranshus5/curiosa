@@ -6,7 +6,7 @@ import type { Category } from '@/types'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-const TARGET_DAILY_COUNT = 3
+const TARGET_DAILY_COUNT = 1
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
