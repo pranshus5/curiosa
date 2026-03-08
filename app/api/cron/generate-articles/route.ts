@@ -67,7 +67,7 @@ export async function GET(request: Request) {
           message: 'No articles were generated',
           hint: 'Check Vercel runtime logs for Gemini status/raw response lines',
         },
-        { status: 500 }
+        { status: 500 },
       )
     }
 
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
         error: 'Generation Failed',
         message: err?.message || 'Unknown error',
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
