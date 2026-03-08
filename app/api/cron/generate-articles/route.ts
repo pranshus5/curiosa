@@ -6,7 +6,7 @@ import type { Category } from '@/types'
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-const TARGET_DAILY_COUNT = 1
+const TARGET_DAILY_COUNT = 3
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
@@ -60,15 +60,7 @@ export async function GET(request: Request) {
     })
 
     if (!articles || articles.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Generation Failed',
-          message: 'No articles were generated',
-          hint: 'Check Vercel runtime logs for Gemini status/raw response lines',
-        },
-        { status: 500 },
-      )
+      throw new Error('No articles were generated')
     }
 
     const { error: insertError } = await db
