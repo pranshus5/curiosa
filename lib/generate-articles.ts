@@ -2,7 +2,7 @@ import { Category } from '@/types'
 
 const SYMBOLS = ['◈', '✦', '△', '○', '⊕', '♩', '◎', '❋', '◇', '☆', '◉', '⟡']
 const GEMINI_MODEL = 'gemini-2.5-flash'
-const DEFAULT_DAILY_COUNT = 1
+const DEFAULT_DAILY_COUNT = 3
 
 const REAL_SOURCES: Record<Category, { name: string; url: string }> = {
   Philosophy: { name: 'Aeon', url: 'https://aeon.co' },
@@ -76,26 +76,32 @@ function safeParseJson<T>(value: string): T | null {
   }
 }
 
-function pickCategories(count: number, excludeCategories: Category[] = []): Category[] {
-  const preferred: Category[] = [
-    'Technology',
-    'Psychology',
-    'Culture',
-    'Science',
-    'Indian Economy',
-    'Indian Innovation',
-  ]
+function shuffle<T>(items: T[]): T[] {
+  return [...items].sort(() => Math.random() - 0.5)
+}
 
-  const availablePreferred = preferred.filter((c) => !excludeCategories.includes(c))
-  if (availablePreferred.length >= count) {
-    return availablePreferred.slice(0, count)
+function pickCategories(count: number, excludeCategories: Category[] = []): Category[] {
+  const available = ALL_CATS.filter((c) => !excludeCategories.includes(c))
+  const india = available.filter((c) => c.startsWith('Indian'))
+  const global = available.filter((c) => !c.startsWith('Indian'))
+
+  const picked: Category[] = []
+
+  if (india.length > 0) {
+    picked.push(...shuffle(india).slice(0, Math.min(1, count)))
   }
 
-  const remaining = ALL_CATS.filter(
-    (c) => !excludeCategories.includes(c) && !availablePreferred.includes(c)
-  )
+  const remaining = count - picked.length
+  if (remaining > 0) {
+    picked.push(...shuffle(global).slice(0, remaining))
+  }
 
-  return [...availablePreferred, ...remaining].slice(0, count)
+  if (picked.length < count) {
+    const leftovers = available.filter((c) => !picked.includes(c))
+    picked.push(...shuffle(leftovers).slice(0, count - picked.length))
+  }
+
+  return picked.slice(0, count)
 }
 
 function buildPrompt(cat: Category, source: { name: string; url: string }) {
@@ -105,7 +111,7 @@ function buildPrompt(cat: Category, source: { name: string; url: string }) {
     ? `
 Generate a thoughtful article about ${cat} for an Indian audience, in the style of ${source.name}.
 
-Focus on real Indian context, institutions, markets, policies, culture, startups, or public life as appropriate.
+Focus on real Indian context, institutions, markets, policies, culture, startups, business trends, or public life as appropriate.
 
 Return ONLY valid JSON with exactly this structure:
 {
@@ -146,20 +152,93 @@ Rules:
 `.trim()
 }
 
+function buildFallbackArticle(cat: Category, dateStr: string): GeneratedArticle {
+  const source = REAL_SOURCES[cat]
+  const isIndia = cat.startsWith('Indian')
+
+  const titleMap: Record<Category, string> = {
+    Philosophy: 'The Questions That Quietly Shape a Life',
+    Science: 'Why Discovery Still Changes How We See the World',
+    History: 'What the Past Still Knows About the Present',
+    Economics: 'The Hidden Logic Behind Everyday Prosperity',
+    Culture: 'How Culture Becomes the Memory of a Society',
+    Technology: 'The Tools We Build, and the People They Rebuild',
+    Arts: 'Why Great Art Still Feels New',
+    Anthropology: 'What Human Rituals Reveal About Modern Life',
+    Research: 'Why Good Research Matters Beyond the Lab',
+    Psychology: 'The Inner Patterns That Quietly Guide Behaviour',
+    'Indian Economy': 'India’s Economic Momentum and the Shape of What Comes Next',
+    'Indian Politics': 'How India’s Political Energy Reshapes Public Life',
+    'Indian Culture': 'Why Indian Culture Keeps Renewing Itself',
+    'Indian Business': 'The New Logic of Indian Business Growth',
+    'Indian Innovation': 'How Indian Innovation Is Moving From Promise to Scale',
+  }
+
+  const excerptMap: Record<Category, string> = {
+    Philosophy: 'Big ideas rarely arrive with noise. They often begin as better questions.',
+    Science: 'Science moves forward through method, patience, and surprise. Its impact is both practical and imaginative.',
+    History: 'History is not only a record of events. It is also a guide to recurring human choices.',
+    Economics: 'Economics is not just about markets. It is about incentives, trade-offs, and the systems that shape ordinary life.',
+    Culture: 'Culture lives in habits, language, and symbols. It evolves slowly, then all at once.',
+    Technology: 'Technology changes the pace of life first, and the structure of life later. That is why its influence is rarely neutral.',
+    Arts: 'Art remains one of the clearest ways a society understands itself. It preserves feeling as much as form.',
+    Anthropology: 'Anthropology helps us see the familiar from a useful distance. In that distance, patterns become visible.',
+    Research: 'Research creates public value long before it becomes headline news. Its deepest impact is often cumulative.',
+    Psychology: 'Psychology explains why thought, emotion, and behaviour do not always move in straight lines. It gives language to inner structure.',
+    'Indian Economy': 'India’s economy is being shaped by scale, aspiration, and uneven but real transformation. The next phase will depend on execution as much as ambition.',
+    'Indian Politics': 'Indian politics increasingly reflects both democratic intensity and institutional strain. Its outcomes shape everyday citizenship.',
+    'Indian Culture': 'Indian culture remains plural, layered, and adaptive. Its energy comes from continuity without stagnation.',
+    'Indian Business': 'Indian business is entering a phase where scale, governance, and execution matter more than easy growth stories.',
+    'Indian Innovation': 'Indian innovation is now moving beyond startup enthusiasm into durable systems, products, and public infrastructure.',
+  }
+
+  const content = isIndia
+    ? `India’s current moment makes ${cat.toLowerCase()} especially important to understand. Across markets, institutions, and public debate, the country is trying to balance speed with scale, ambition with capacity, and visibility with long-term depth. That tension is where the most interesting stories now live.
+
+What makes this category especially meaningful is that it cannot be reduced to headlines alone. It is shaped by policy choices, social habits, infrastructure realities, and the growing confidence of a younger generation that expects both opportunity and relevance. In that sense, the story is not just about performance, but direction.
+
+A serious reading of ${cat.toLowerCase()} in India therefore requires both optimism and discipline. The promise is real, but so are the constraints. The most valuable perspective is one that notices movement without mistaking it for completion.`
+    : `${cat} remains one of the most useful lenses for understanding modern life. It helps connect individual experience with larger systems of thought, taste, institutions, and historical memory. That is why it continues to matter even when public attention moves quickly elsewhere.
+
+One reason this category endures is that it reveals structures beneath surface events. Whether the subject is behaviour, beauty, evidence, or meaning, the best writing in this space shows how deep assumptions shape ordinary decisions. That is where insight begins.
+
+To read ${cat.toLowerCase()} well is to become more attentive. It trains the mind to notice patterns, trade-offs, and possibilities that are easy to miss in faster forms of discourse. In that sense, it is not only informative, but formative.`
+
+  const tags = isIndia
+    ? ['india', cat.toLowerCase().replace(' ', '-'), 'analysis']
+    : [cat.toLowerCase(), 'ideas', 'analysis']
+
+  return {
+    title: titleMap[cat],
+    excerpt: excerptMap[cat],
+    content,
+    references: [`${source.name}`, source.url],
+    tags,
+    category: cat,
+    source: source.name,
+    source_url: source.url,
+    date: dateStr,
+    read_time: 5,
+    sym: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+  }
+}
+
 async function generateOneArticle(
   apiKey: string,
   cat: Category,
-  dateStr: string
+  dateStr: string,
 ): Promise<GeneratedArticle | null> {
   const source = REAL_SOURCES[cat]
   if (!source) {
-    console.error(`No source configured for ${cat}`)
     return null
   }
 
   const prompt = buildPrompt(cat, source)
 
   try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 12000)
+
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
       {
@@ -173,8 +252,11 @@ async function generateOneArticle(
             responseMimeType: 'application/json',
           },
         }),
-      }
+        signal: controller.signal,
+      },
     )
+
+    clearTimeout(timeout)
 
     const rawText = await res.text()
     console.log(`Gemini status for ${cat}: ${res.status}`)
@@ -187,20 +269,16 @@ async function generateOneArticle(
 
     const envelope = safeParseJson<any>(rawText)
     if (!envelope) {
-      console.error(`Failed to parse Gemini envelope for ${cat}`)
       return null
     }
 
-    const contentText = envelope?.candidates?.[0]?.content?.parts?.[0]?.text
-    if (!contentText || typeof contentText !== 'string') {
-      console.error(`Gemini returned no usable text for ${cat}:`, envelope)
+    const text = envelope?.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!text || typeof text !== 'string') {
       return null
     }
 
-    const obj = safeParseJson<GeminiArticlePayload>(contentText)
+    const obj = safeParseJson<GeminiArticlePayload>(text)
     if (!obj) {
-      console.error(`Failed to parse article JSON for ${cat}`)
-      console.error(`Article text was: ${contentText}`)
       return null
     }
 
@@ -220,7 +298,6 @@ async function generateOneArticle(
       : []
 
     if (!title || !excerpt || !content) {
-      console.error(`Incomplete article returned for ${cat}:`, obj)
       return null
     }
 
@@ -238,14 +315,14 @@ async function generateOneArticle(
       sym: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
     }
   } catch (err) {
-    console.error(`Failed for ${cat}:`, err)
+    console.error(`Gemini exception for ${cat}:`, err)
     return null
   }
 }
 
 export async function generateDailyArticles(
   dateStr: string,
-  options: GenerateOptions = {}
+  options: GenerateOptions = {},
 ): Promise<GeneratedArticle[]> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
@@ -254,16 +331,19 @@ export async function generateDailyArticles(
 
   const count = options.count ?? DEFAULT_DAILY_COUNT
   const excludeCategories = options.excludeCategories ?? []
-
   const picks = pickCategories(count, excludeCategories)
+
   console.log('Generating for:', picks.join(', '))
 
   const articles: GeneratedArticle[] = []
 
   for (const cat of picks) {
-    const art = await generateOneArticle(apiKey, cat, dateStr)
-    if (art) {
-      articles.push(art)
+    const generated = await generateOneArticle(apiKey, cat, dateStr)
+    if (generated) {
+      articles.push(generated)
+    } else {
+      console.warn(`Using fallback article for ${cat}`)
+      articles.push(buildFallbackArticle(cat, dateStr))
     }
   }
 
