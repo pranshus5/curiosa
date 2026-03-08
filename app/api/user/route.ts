@@ -1,100 +1,66 @@
+// app/api/user/route.ts
+//
+// Simple user-state API using a client-generated UUID stored in localStorage.
+// No authentication required — each browser is its own "user".
+// To add real auth later, replace user_id with a Supabase Auth UID.
+
 import { NextResponse } from 'next/server'
-import { generateDailyArticles } from '@/lib/generate-articles'
 import { createServiceClient } from '@/lib/supabase'
-import type { Category } from '@/types'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
 
-const TARGET_DAILY_COUNT = 1
-
+// ── GET: fetch read articles + annotations for a user ──
 export async function GET(request: Request) {
-  const url = new URL(request.url)
-  const secretParam = url.searchParams.get('secret')
-  const authHeader = request.headers.get('authorization')
-  const cronHeader = request.headers.get('x-vercel-cron')
-  const cronSecret = process.env.CRON_SECRET || ''
+  const { searchParams } = new URL(request.url)
+  const userId = searchParams.get('user_id')
+  if (!userId) return NextResponse.json({ error: 'user_id required' }, { status: 400 })
 
-  const ok =
-    cronHeader === '1' ||
-    secretParam === cronSecret ||
-    authHeader === `Bearer ${cronSecret}`
+  const db = createServiceClient()
 
-  if (!ok) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const [readRes, annotRes] = await Promise.all([
+    db.from('user_article_states').select('article_id, read_at').eq('user_id', userId).eq('is_read', true),
+    db.from('annotations').select('*').eq('user_id', userId).order('created_at', { ascending: false }),
+  ])
 
-  try {
-    const db = createServiceClient()
-    const today = new Date().toISOString().split('T')[0]
+  return NextResponse.json({
+    readArticles: readRes.data || [],
+    annotations:  annotRes.data || [],
+  })
+}
 
-    const { data: existing, error: checkError } = await db
-      .from('articles')
-      .select('id, category')
-      .eq('date', today)
+// ── POST: mark article as read OR save annotation ──
+export async function POST(request: Request) {
+  const body = await request.json()
+  const db   = createServiceClient()
 
-    if (checkError) {
-      throw new Error(`Supabase check failed: ${checkError.message}`)
-    }
-
-    const existingRows = existing ?? []
-    const existingCount = existingRows.length
-
-    if (existingCount >= TARGET_DAILY_COUNT) {
-      return NextResponse.json({
-        success: true,
-        message: 'Articles already exist for today',
-        count: existingCount,
-      })
-    }
-
-    const existingCategories = existingRows
-      .map((row: any) => row.category)
-      .filter((value: any) => typeof value === 'string') as Category[]
-
-    const missingCount = TARGET_DAILY_COUNT - existingCount
-
-    const articles = await generateDailyArticles(today, {
-      count: missingCount,
-      excludeCategories: existingCategories,
-    })
-
-    if (!articles || articles.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Generation Failed',
-          message: 'No articles were generated',
-          hint: 'Check Vercel runtime logs for Gemini status/raw response lines',
-        },
-        { status: 500 }
-      )
-    }
-
-    const { error: insertError } = await db
-      .from('articles')
-      .insert(articles)
-
-    if (insertError) {
-      throw new Error(`Supabase insert failed: ${insertError.message}`)
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Articles generated successfully',
-      count: existingCount + articles.length,
-      inserted_now: articles.length,
-    })
-  } catch (err: any) {
-    console.error('CRON EXECUTION ERROR:', err)
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Generation Failed',
-        message: err?.message || 'Unknown error',
-      },
-      { status: 500 }
+  // Mark as read
+  if (body.type === 'mark_read') {
+    const { user_id, article_id } = body
+    const { error } = await db.from('user_article_states').upsert(
+      { user_id, article_id, is_read: true, read_at: new Date().toISOString() },
+      { onConflict: 'user_id,article_id' }
     )
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
   }
+
+  // Save annotation
+  if (body.type === 'save_annotation') {
+    const { user_id, article_id, article_title, text, note, color } = body
+    const { data, error } = await db.from('annotations').insert({
+      user_id, article_id, article_title, text, note, color,
+    }).select().single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ annotation: data })
+  }
+
+  // Delete annotation
+  if (body.type === 'delete_annotation') {
+    const { id, user_id } = body
+    const { error } = await db.from('annotations').delete().eq('id', id).eq('user_id', user_id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  return NextResponse.json({ error: 'Unknown type' }, { status: 400 })
 }
