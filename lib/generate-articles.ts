@@ -1,6 +1,8 @@
-import { Category } from '@/types'
+import { ALL_CATEGORIES, Category } from '@/types'
 
 const SYMBOLS = ['◈', '✦', '△', '○', '⊕', '♩', '◎', '❋', '◇']
+const GEMINI_MODEL = 'gemini-2.5-flash'
+const TARGET_DAILY_COUNT = 3
 
 const REAL_SOURCES: Record<Category, { name: string; url: string }[]> = {
   Philosophy: [{ name: 'Aeon', url: 'https://aeon.co' }],
@@ -42,6 +44,11 @@ type GeminiArticlePayload = {
   tags?: unknown
 }
 
+type GenerateOptions = {
+  count?: number
+  excludeCategories?: Category[]
+}
+
 function safeParseJson<T>(value: string): T | null {
   try {
     return JSON.parse(value) as T
@@ -54,31 +61,61 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export async function generateDailyArticles(dateStr: string): Promise<GeneratedArticle[]> {
-  const apiKey = process.env.GEMINI_API_KEY
+function pickRandom<T>(items: T[], count: number): T[] {
+  return [...items].sort(() => Math.random() - 0.5).slice(0, count)
+}
 
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is missing in environment variables')
-  }
+function pickCategories(count: number, excludeCategories: Category[] = []): Category[] {
+  const available = ALL_CATEGORIES.filter((c) => !excludeCategories.includes(c))
 
-  const selectedCategories: Category[] = [
-    'Technology',
-    'Psychology',
-    'Culture',
+  const indiaCategories = available.filter((c) => c.startsWith('Indian')) as Category[]
+  const globalCategories = available.filter((c) => !c.startsWith('Indian')) as Category[]
+
+  const indiaCount = Math.min(1, count, indiaCategories.length)
+  const globalCount = Math.min(count - indiaCount, globalCategories.length)
+
+  const picked: Category[] = [
+    ...pickRandom(indiaCategories, indiaCount),
+    ...pickRandom(globalCategories, globalCount),
   ]
 
-  const articles: GeneratedArticle[] = []
+  if (picked.length < count) {
+    const leftovers = available.filter((c) => !picked.includes(c))
+    picked.push(...pickRandom(leftovers, count - picked.length))
+  }
 
-  for (const cat of selectedCategories) {
-    const source = REAL_SOURCES[cat]?.[0]
+  return picked.slice(0, count)
+}
 
-    if (!source) {
-      console.error(`No source configured for category: ${cat}`)
-      continue
-    }
+function buildPrompt(cat: Category, sourceName: string) {
+  const isIndiaCategory = cat.startsWith('Indian')
 
-    const prompt = `
-Generate a thoughtful, original article about ${cat} in the style of ${source.name}.
+  return isIndiaCategory
+    ? `
+Generate a thoughtful, original article about ${cat} in the Indian context, in the style of ${sourceName}.
+
+Focus on India-specific developments, institutions, markets, policies, culture, startups, business trends, or public life as appropriate for the category.
+
+Return ONLY valid JSON with exactly this structure:
+{
+  "title": "A compelling headline",
+  "excerpt": "A 2-sentence summary",
+  "content": "A detailed 5-paragraph exploration with line breaks",
+  "refs": ["Source 1", "Source 2"],
+  "tags": ["tag1", "tag2"]
+}
+
+Rules:
+- No markdown
+- No backticks
+- No commentary outside the JSON
+- refs must be an array of strings
+- tags must be an array of strings
+- content should be polished, readable, and insightful
+- make the article feel current and grounded in India
+`.trim()
+    : `
+Generate a thoughtful, original article about ${cat} in the style of ${sourceName}.
 
 Return ONLY valid JSON with exactly this structure:
 {
@@ -97,12 +134,28 @@ Rules:
 - tags must be an array of strings
 - content should be polished and readable
 `.trim()
+}
 
+async function generateOneArticle(
+  apiKey: string,
+  cat: Category,
+  dateStr: string,
+): Promise<GeneratedArticle | null> {
+  const source = REAL_SOURCES[cat]?.[0]
+
+  if (!source) {
+    console.error(`No source configured for category: ${cat}`)
+    return null
+  }
+
+  const prompt = buildPrompt(cat, source.name)
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await sleep(1200)
+      await sleep(1200 * attempt)
 
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: {
@@ -116,16 +169,16 @@ Rules:
               responseMimeType: 'application/json',
             },
           }),
-        }
+        },
       )
 
       const rawText = await res.text()
 
-      console.log(`Gemini status for ${cat}: ${res.status}`)
-      console.log(`Gemini raw response for ${cat}: ${rawText}`)
+      console.log(`Gemini status for ${cat}, attempt ${attempt}: ${res.status}`)
+      console.log(`Gemini raw response for ${cat}, attempt ${attempt}: ${rawText}`)
 
       if (!res.ok) {
-        console.error(`Gemini request failed for ${cat}: ${res.status}`)
+        console.error(`Gemini request failed for ${cat}, attempt ${attempt}: ${res.status}`)
         continue
       }
 
@@ -168,7 +221,7 @@ Rules:
         continue
       }
 
-      articles.push({
+      return {
         title,
         excerpt,
         content,
@@ -180,11 +233,38 @@ Rules:
         date: dateStr,
         read_time: 7,
         sym: SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
-      })
-
-      console.log(`Article generated successfully for ${cat}`)
+      }
     } catch (error) {
-      console.error(`Curation failed for ${cat}:`, error)
+      console.error(`Curation failed for ${cat}, attempt ${attempt}:`, error)
+    }
+  }
+
+  return null
+}
+
+export async function generateDailyArticles(
+  dateStr: string,
+  options: GenerateOptions = {},
+): Promise<GeneratedArticle[]> {
+  const apiKey = process.env.GEMINI_API_KEY
+
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is missing in environment variables')
+  }
+
+  const count = options.count ?? TARGET_DAILY_COUNT
+  const excludeCategories = options.excludeCategories ?? []
+  const selectedCategories = pickCategories(count, excludeCategories)
+
+  console.log('Selected categories:', JSON.stringify(selectedCategories))
+
+  const articles: GeneratedArticle[] = []
+
+  for (const cat of selectedCategories) {
+    const article = await generateOneArticle(apiKey, cat, dateStr)
+    if (article) {
+      articles.push(article)
+      console.log(`Article generated successfully for ${cat}`)
     }
   }
 
