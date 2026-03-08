@@ -2,7 +2,7 @@ import { ALL_CATEGORIES, Category } from '@/types'
 
 const SYMBOLS = ['◈', '✦', '△', '○', '⊕', '♩', '◎', '❋', '◇']
 const GEMINI_MODEL = 'gemini-2.5-flash'
-const TARGET_DAILY_COUNT = 3
+const TARGET_DAILY_COUNT = 1
 
 const REAL_SOURCES: Record<Category, { name: string; url: string }[]> = {
   Philosophy: [{ name: 'Aeon', url: 'https://aeon.co' }],
@@ -62,30 +62,9 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function pickRandom<T>(items: T[], count: number): T[] {
-  return [...items].sort(() => Math.random() - 0.5).slice(0, count)
-}
-
 function pickCategories(count: number, excludeCategories: Category[] = []): Category[] {
-  const available = ALL_CATEGORIES.filter((c) => !excludeCategories.includes(c))
-
-  const indiaCategories = available.filter((c) => c.startsWith('Indian')) as Category[]
-  const globalCategories = available.filter((c) => !c.startsWith('Indian')) as Category[]
-
-  const indiaCount = Math.min(1, count, indiaCategories.length)
-  const globalCount = Math.min(count - indiaCount, globalCategories.length)
-
-  const picked: Category[] = [
-    ...pickRandom(indiaCategories, indiaCount),
-    ...pickRandom(globalCategories, globalCount),
-  ]
-
-  if (picked.length < count) {
-    const leftovers = available.filter((c) => !picked.includes(c))
-    picked.push(...pickRandom(leftovers, count - picked.length))
-  }
-
-  return picked.slice(0, count)
+  const preferred: Category[] = ['Technology', 'Psychology', 'Culture']
+  return preferred.filter((c) => !excludeCategories.includes(c)).slice(0, count)
 }
 
 function buildPrompt(cat: Category, sourceName: string) {
@@ -153,7 +132,7 @@ async function generateOneArticle(
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await sleep(1200 * attempt)
+      await sleep(5000 * attempt)
 
       const res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
@@ -190,10 +169,7 @@ async function generateOneArticle(
       }
 
       const candidate = envelope?.candidates?.[0]
-      const finishReason = candidate?.finishReason
       const text = candidate?.content?.parts?.[0]?.text
-
-      console.log(`Gemini finishReason for ${cat}: ${finishReason}`)
 
       if (!text || typeof text !== 'string') {
         console.error(`Gemini returned no usable text for ${cat}:`, envelope)
